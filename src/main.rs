@@ -160,6 +160,7 @@ enum DrawMode {
     Pretty,
 }
 
+#[derive(Clone)]
 struct Tree {
     nodes: Vec<Node>,
     config: Config,
@@ -413,6 +414,7 @@ pub fn main() {
             d.clear_background(Color::WHITE);
             tree.render(&mut d, DrawMode::Pretty);
             tree.sim();
+            let pretty = render::PrettyRender::new(tree.clone());
             regenerated = false;
         }
 
