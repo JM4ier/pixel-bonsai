@@ -21,11 +21,28 @@ impl SimplexDensityPRG {
         for x in 0..width {
             for y in 0..height {
                 let noise_val = noise.sum_octave_2d(3, x as _, y as _, 0.5, 0.003).abs();
-                let center_dist = Vector2::new(
-                    x as f32 - width as f32 / 2.0,
-                    y as f32 - height as f32 / 2.0,
-                );
-                let centering = (width as f32 / (center_dist.length() + 1.0)).powf(1.5);
+                let centering = {
+                    let width = width as f32;
+                    let height = height as f32;
+
+                    let midx = width / 2.0;
+                    let dx = x as f32 - midx;
+
+                    let midy = height / 2.0;
+                    let dy = y as f32 - midy;
+
+                    let edge_pow = 3.5;
+
+                    let dist = dx.abs().powf(edge_pow) + dy.abs().powf(edge_pow);
+                    let fade0 = (0.5 * width.min(height)).powf(edge_pow);
+                    let fade1 = (0.8f32).powf(edge_pow) * fade0;
+
+                    let v = (dist - fade0) / (fade1 - fade0);
+                    let v = v.max(0.0).min(1.0);
+
+                    // sin curve mapping 0,1 to 0,1 to have a smooth gradient
+                    (((v - 0.5) * std::f32::consts::PI).sin() + 1.0) * 0.5
+                };
                 let buf_val = noise_val * centering;
                 buf[x][y] = buf_val;
                 rows[x] += buf_val;
@@ -135,6 +152,7 @@ struct Tree {
     nodes: Vec<Node>,
     config: Config,
     points: Vec<Vector2>,
+    growing: bool,
 }
 
 impl Tree {
@@ -153,6 +171,7 @@ impl Tree {
             ))],
             config,
             points,
+            growing: true,
         }
     }
     fn render(&self, d: &mut RaylibDrawHandle, mode: DrawMode) {
@@ -206,6 +225,9 @@ impl Tree {
         }
     }
     fn sim(&mut self) {
+        if !self.growing {
+            return;
+        }
         let mut new_nodes = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
             if node.child_count >= self.config.max_children || !node.alive {
@@ -245,6 +267,7 @@ impl Tree {
                 })
             })
             .last();
+        let mut has_change = false;
         'outer: for node in new_nodes.into_iter() {
             if node.depth > self.config.max_depth
                 || node.pos.y - self.nodes[node.parent.unwrap()].pos.y < self.config.min_y_growth
@@ -260,7 +283,9 @@ impl Tree {
             }
             self.nodes[node.parent.unwrap()].child_count += 1;
             self.nodes.push(node);
+            has_change = true;
         }
+        self.growing &= has_change;
 
         self.prune();
         self.recalculate_weight();
@@ -325,7 +350,7 @@ pub fn main() {
         min_y_growth: 0.0,
         parent_dir_factor: 0.1,
         weight_display_pow: 0.35,
-        prune_pow: 0.37,
+        prune_pow: 0.35,
         prune_size_ratio: 0.2,
         leaf_max_width: 3.0,
         sprout_max_width: 3.5,
@@ -342,13 +367,15 @@ pub fn main() {
     'regenerate: while !rl.window_should_close() {
         let mut tree = Tree::new(config);
 
-        for _ in 0..10 {
+        for _ in 0..5 {
             tree.sim();
         }
 
-        if tree.nodes.len() < 10 {
+        if tree.nodes.len() < 5 {
             continue;
         }
+
+        rl.set_target_fps(60);
 
         while !rl.window_should_close() {
             if rl.is_key_down(KeyboardKey::KEY_R) && !regenerated {
