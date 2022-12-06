@@ -58,6 +58,13 @@ impl SimplexDensityPRG {
 }
 
 #[derive(Debug, Copy, Clone)]
+struct ColorPalette {
+    leaf: Color,
+    new_branch: Color,
+    old_branch: Color,
+}
+
+#[derive(Debug, Copy, Clone)]
 struct Config {
     attraction_dist: f32,
     kill_dist: f32,
@@ -73,6 +80,12 @@ struct Config {
     weight_display_pow: f32,
     prune_pow: f32,
     prune_size_ratio: f32,
+    /// Maximum branch width to grow leaves there
+    leaf_max_width: f32,
+    /// Maximum branch width to color the branch green
+    sprout_max_width: f32,
+    leaf_size: f32,
+    colors: ColorPalette,
 }
 
 #[derive(Debug, Clone)]
@@ -110,6 +123,12 @@ impl Node {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum DrawMode {
+    Debug,
+    Pretty,
+}
+
 struct Tree {
     nodes: Vec<Node>,
     config: Config,
@@ -134,23 +153,54 @@ impl Tree {
             points,
         }
     }
-    fn render(&self, d: &mut RaylibDrawHandle) {
+    fn render(&self, d: &mut RaylibDrawHandle, mode: DrawMode) {
         let map_pos = |pos: &Vector2| Vector2::new(pos.x, self.config.height - pos.y);
-        for point in &self.points {
-            d.draw_circle_v(map_pos(point), 0.99, Color::BLACK);
-        }
-        for node in self.nodes.iter() {
-            let color = if node.alive {
-                Color::BLUE
-            } else {
-                Color::RED
-            };
-            let pos = map_pos(&node.pos);
-            if let Some(parent_idx) = node.parent {
-                d.draw_line_v(map_pos(&self.nodes[parent_idx].pos), pos, color);
+        match mode {
+            DrawMode::Debug => {
+                for point in &self.points {
+                    d.draw_circle_v(map_pos(point), 0.99, Color::BLACK);
+                }
+                for node in self.nodes.iter() {
+                    let color = if node.alive { Color::BLUE } else { Color::RED };
+                    let pos = map_pos(&node.pos);
+                    if let Some(parent_idx) = node.parent {
+                        d.draw_line_v(map_pos(&self.nodes[parent_idx].pos), pos, color);
+                    }
+                    let radius = 1.0 + (node.weight as f32).powf(self.config.weight_display_pow);
+                    d.draw_circle_v(pos, radius, color);
+                }
             }
-            let radius = 1.0 + (node.weight as f32).powf(self.config.weight_display_pow);
-            d.draw_circle_v(pos, radius, color);
+            DrawMode::Pretty => {
+                for node in self.nodes.iter().filter(|n| n.alive) {
+                    let radius = 0.5 + (node.weight as f32).powf(self.config.weight_display_pow);
+                    let mut leaf = false;
+
+                    let color = if radius < self.config.leaf_max_width {
+                        leaf = true;
+                        self.config.colors.leaf
+                    } else if radius < self.config.sprout_max_width {
+                        self.config.colors.new_branch
+                    } else {
+                        self.config.colors.old_branch
+                    };
+
+                    let pos = map_pos(&node.pos);
+                    if let Some(parent_idx) = node.parent {
+                        for i in 0..10 {
+                            let f = (i as f32 + 1.0) / 10.0;
+                            d.draw_circle_v(
+                                pos.lerp(map_pos(&self.nodes[parent_idx].pos), f),
+                                radius,
+                                color,
+                            );
+                        }
+                    }
+                    d.draw_circle_v(pos, radius, color);
+                    if leaf {
+                        d.draw_circle_v(pos, self.config.leaf_size, color.fade(0.1));
+                    }
+                }
+            }
         }
     }
     fn sim(&mut self) {
@@ -255,6 +305,11 @@ impl Tree {
 }
 
 pub fn main() {
+    let colors = ColorPalette {
+        leaf: Color::GREEN,
+        new_branch: Color::GREEN,
+        old_branch: Color::BROWN,
+    };
     let config = Config {
         attraction_dist: 20.0,
         kill_dist: 13.0,
@@ -270,16 +325,28 @@ pub fn main() {
         weight_display_pow: 0.35,
         prune_pow: 0.37,
         prune_size_ratio: 0.2,
+        leaf_max_width: 3.0,
+        sprout_max_width: 3.5,
+        leaf_size: 25.0,
+        colors,
     };
 
     let (mut rl, thread) = raylib::init()
         .size(config.width as _, config.height as _)
-        .title("Cloud")
+        .title("hehe")
         .build();
 
     let mut regenerated = false;
     'regenerate: while !rl.window_should_close() {
         let mut tree = Tree::new(config);
+
+        for _ in 0..10 {
+            tree.sim();
+        }
+
+        if tree.nodes.len() < 10 {
+            continue;
+        }
 
         while !rl.window_should_close() {
             if rl.is_key_down(KeyboardKey::KEY_R) && !regenerated {
@@ -288,7 +355,7 @@ pub fn main() {
             }
             let mut d = rl.begin_drawing(&thread);
             d.clear_background(Color::WHITE);
-            tree.render(&mut d);
+            tree.render(&mut d, DrawMode::Pretty);
             tree.sim();
             regenerated = false;
         }
