@@ -1,5 +1,7 @@
 #![feature(drain_filter)]
 
+mod render;
+
 use std::ops::Add;
 
 use fuss::Simplex;
@@ -105,9 +107,13 @@ struct Config {
     sprout_max_width: f32,
     leaf_size: f32,
     colors: ColorPalette,
+    node_depth_change: f32,
+    node_depth_max: usize,
+    /// How big one "pixel" is (in pixels)
+    pixel_size: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct Node {
     alive: bool,
     pos: Vector2,
@@ -117,6 +123,7 @@ struct Node {
     depth: usize,
     /// amount of children attached to this node + 1
     weight: usize,
+    z: f32,
 }
 
 impl Node {
@@ -128,16 +135,21 @@ impl Node {
             child_count: 0,
             depth: 0,
             weight: 1,
+            z: 0.0,
         }
     }
-    fn new_branch(pos: Vector2, parent: usize, parent_depth: usize) -> Self {
+    fn new_branch(pos: Vector2, parent_idx: usize, parent: Node, config: Config) -> Self {
+        let z_change = (2.0 * rand::random::<f32>() - 1.0) * config.node_depth_change;
+        let z = parent.z + z_change;
+        let z = z.max(0.0).min(config.node_depth_max as _);
         Self {
             alive: true,
             pos,
-            parent: Some(parent),
+            parent: Some(parent_idx),
             child_count: 0,
-            depth: parent_depth + 1,
+            depth: parent.depth + 1,
             weight: 1,
+            z,
         }
     }
 }
@@ -156,6 +168,17 @@ struct Tree {
 }
 
 impl Tree {
+    fn new_min_growth(config: Config, iter: usize) -> Self {
+        let mut tree = Self::new(config);
+        for _ in 0..iter {
+            tree.sim();
+        }
+        if tree.nodes.len() < iter {
+            Self::new_min_growth(config, iter)
+        } else {
+            tree
+        }
+    }
     fn new(config: Config) -> Self {
         let prg_map = SimplexDensityPRG::new(config.width as _, config.height as _);
         let points = (0..config.num_points)
@@ -187,14 +210,13 @@ impl Tree {
                     if let Some(parent_idx) = node.parent {
                         d.draw_line_v(map_pos(&self.nodes[parent_idx].pos), pos, color);
                     }
-                    let radius = 1.0 + (node.weight as f32).powf(self.config.weight_display_pow);
-                    d.draw_circle_v(pos, radius, color);
+                    d.draw_circle_v(pos, self.radius_of(node), color);
                 }
             }
             DrawMode::Pretty => {
                 for node in self.nodes.iter().filter(|n| n.alive) {
-                    let radius = 0.5 + (node.weight as f32).powf(self.config.weight_display_pow);
                     let mut leaf = false;
+                    let radius = self.radius_of(node);
 
                     let color = if radius < self.config.leaf_max_width {
                         leaf = true;
@@ -224,6 +246,11 @@ impl Tree {
             }
         }
     }
+
+    pub fn radius_of(&self, node: &Node) -> f32 {
+        0.5 + (node.weight as f32).powf(self.config.weight_display_pow)
+    }
+
     fn sim(&mut self) {
         if !self.growing {
             return;
@@ -258,7 +285,12 @@ impl Tree {
             };
             let delta = avg_dir.lerp(prev_dir, self.config.parent_dir_factor);
 
-            new_nodes.push(Node::new_branch(node.pos + delta, node_idx, node.depth));
+            new_nodes.push(Node::new_branch(
+                node.pos + delta,
+                node_idx,
+                *node,
+                self.config,
+            ));
         }
         self.points
             .drain_filter(|p| {
@@ -355,6 +387,9 @@ pub fn main() {
         leaf_max_width: 3.0,
         sprout_max_width: 3.5,
         leaf_size: 25.0,
+        node_depth_change: 1.0,
+        node_depth_max: 5,
+        pixel_size: 5,
         colors,
     };
 
@@ -365,15 +400,7 @@ pub fn main() {
 
     let mut regenerated = false;
     'regenerate: while !rl.window_should_close() {
-        let mut tree = Tree::new(config);
-
-        for _ in 0..5 {
-            tree.sim();
-        }
-
-        if tree.nodes.len() < 5 {
-            continue;
-        }
+        let mut tree = Tree::new_min_growth(config, 5);
 
         rl.set_target_fps(60);
 
