@@ -55,6 +55,7 @@ impl Pixel {
 /// 2 = double shadow??
 pub struct ShadowSample(f32);
 
+#[derive(Clone)]
 pub struct Canvas {
     pixel_size: i32,
     sun: Normal,
@@ -71,10 +72,13 @@ impl Canvas {
             pixel_size,
         }
     }
-    pub fn draw_pixel(&mut self, x: usize, y: usize, pixel: Pixel) {
+    pub fn draw_pixel(&mut self, x: usize, y: usize, mut pixel: Pixel, translucency: f32) {
+        pixel.normal.0 = pixel.normal.0.lerp(self.sun.0, translucency);
+
         if pixel.covers(&self.pixels[x][y]) {
             self.pixels[x][y] = pixel;
         }
+        // TODO: shadow
     }
     /// Draws a sphere onto the canvas
     ///
@@ -99,9 +103,11 @@ impl Canvas {
         for y in from_y..=to_y {
             for x in from_x..=to_x {
                 let (xf, yf) = (x as f32, y as f32);
+                if (Vector2::new(xf, yf) - center).length_sqr() > radius * radius {
+                    continue;
+                }
                 let normal = Normal(Vector2::new(xf - center.x, yf - center.y) * inv_radius);
-                self.draw_pixel(x, y, Pixel { color, normal });
-                // TODO: shadow
+                self.draw_pixel(x, y, Pixel { color, normal }, translucency);
             }
         }
     }
@@ -156,27 +162,37 @@ impl PrettyRender {
             Normal(Vector2::new(-2.0, 1.0).normalized() * 0.7),
             tree.config.pixel_size as _,
         );
+        let mut leaf_canvas = canvas.clone();
         let scaling = 1.0 / tree.config.pixel_size as f32;
         for node in tree.nodes.iter() {
-            if tree.radius_of(node) < tree.config.leaf_max_width {
-                continue;
-            }
             let pos = node.pos;
-            let parent_pos = if let Some(parent_idx) = node.parent {
-                tree.nodes[parent_idx].pos
-            } else {
-                pos - Vector2::new(0.0, tree.config.grow_dist)
-            };
-            for i in 0..10 {
-                let interp_pos = pos.lerp(parent_pos, i as f32 * 0.1);
-                canvas.draw_sphere(
-                    interp_pos * scaling,
-                    tree.radius_of(node) * scaling,
-                    Color::from_hex("8b6354").unwrap(),
-                    0.01,
+            if tree.radius_of(node) < tree.config.leaf_max_width {
+                // rendering a leaf
+                leaf_canvas.draw_sphere(
+                    pos * scaling,
+                    tree.config.leaf_size * scaling,
+                    Color::from_hex("ef8ef9").unwrap(),
+                    0.6,
                 );
+            } else {
+                // rendering a branch
+                let parent_pos = if let Some(parent_idx) = node.parent {
+                    tree.nodes[parent_idx].pos
+                } else {
+                    pos - Vector2::new(0.0, tree.config.grow_dist)
+                };
+                for i in 0..10 {
+                    let interp_pos = pos.lerp(parent_pos, i as f32 * 0.1);
+                    canvas.draw_sphere(
+                        interp_pos * scaling,
+                        tree.radius_of(node) * scaling,
+                        Color::from_hex("8b6354").unwrap(),
+                        0.01,
+                    );
+                }
             }
         }
-        canvas.render_to(d)
+        canvas.render_to(d);
+        leaf_canvas.render_to(d);
     }
 }
