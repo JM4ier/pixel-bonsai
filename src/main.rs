@@ -382,7 +382,7 @@ pub fn main() {
         num_points: 10_000,
         min_y_growth: 0.0,
         parent_dir_factor: 0.1,
-        weight_display_pow: 0.35,
+        weight_display_pow: 0.45,
         prune_pow: 0.35,
         prune_size_ratio: 0.2,
         leaf_max_width: 3.0,
@@ -390,7 +390,7 @@ pub fn main() {
         leaf_size: 25.0,
         node_depth_change: 1.0,
         node_depth_max: 5,
-        pixel_size: 5,
+        pixel_size: 6,
         colors,
     };
 
@@ -412,9 +412,10 @@ pub fn main() {
             }
             let mut d = rl.begin_drawing(&thread);
             d.clear_background(Color::WHITE);
-            tree.render(&mut d, DrawMode::Pretty);
+            //tree.render(&mut d, DrawMode::Pretty);
             tree.sim();
             let pretty = render::PrettyRender::new(tree.clone());
+            pretty.render(&mut d);
             regenerated = false;
         }
 
