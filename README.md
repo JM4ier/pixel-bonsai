@@ -1,10 +1,15 @@
 # pixel-bonsai
 
-Generates funny looking small trees
+## What is this
 
-## Getting started
+It generates pixelated trees
 
-You can check out the program yourself!
+## Explain
+A picture speaks a thousand words, sooo
+
+![a pink tree](meta/pink-tree.png)
+
+## How do I generate my own tree?
 
 ```
 git clone https://github.com/JM4ier/pixel-bonsai.git
