@@ -37,7 +37,7 @@ impl SimplexDensityPRG {
 
                     let dist = dx.abs().powf(edge_pow) + dy.abs().powf(edge_pow);
                     let fade0 = (0.5 * width.min(height)).powf(edge_pow);
-                    let fade1 = (0.8f32).powf(edge_pow) * fade0;
+                    let fade1 = (0.7f32).powf(edge_pow) * fade0;
 
                     let v = (dist - fade0) / (fade1 - fade0);
                     let v = v.max(0.0).min(1.0);
@@ -387,7 +387,7 @@ pub fn main() {
         prune_size_ratio: 0.2,
         leaf_max_width: 2.51,
         sprout_max_width: 3.5,
-        leaf_size: 06.0,
+        leaf_size: 20.0,
         node_depth_change: 1.0,
         node_depth_max: 5,
         pixel_size: 6,
@@ -395,7 +395,7 @@ pub fn main() {
     };
 
     let (mut rl, thread) = raylib::init()
-        .size(config.width as _, config.height as _)
+        .size(config.width as i32 + 100, config.height as i32 + 100)
         .title("hehe")
         .build();
 

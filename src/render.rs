@@ -157,21 +157,25 @@ impl PrettyRender {
     pub fn render(&self, d: &mut RaylibDrawHandle) {
         let tree = &self.tree;
         let mut canvas = Canvas::new(
-            tree.config.width as usize / tree.config.pixel_size,
-            tree.config.height as usize / tree.config.pixel_size,
+            tree.config.width as usize / tree.config.pixel_size + 10,
+            tree.config.height as usize / tree.config.pixel_size + 10,
             Normal(Vector2::new(-2.0, 1.0).normalized() * 0.7),
             tree.config.pixel_size as _,
         );
         let mut leaf_canvas = canvas.clone();
         let scaling = 1.0 / tree.config.pixel_size as f32;
         for node in tree.nodes.iter() {
+            if !node.alive {
+                continue;
+            }
             let pos = node.pos;
             if tree.radius_of(node) < tree.config.leaf_max_width {
                 // rendering a leaf
                 leaf_canvas.draw_sphere(
                     pos * scaling,
                     tree.config.leaf_size * scaling,
-                    Color::from_hex("ef8ef9").unwrap(),
+                    Color::MAROON,
+                    //Color::from_hex("ef8ef9").unwrap(),
                     0.6,
                 );
             } else {
