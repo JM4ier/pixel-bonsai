@@ -115,19 +115,15 @@ impl Canvas {
         for x in 0..self.width() {
             for y in 0..self.height() {
                 // todo probably needs other light calculation because not smort enough
-                let light = self
-                    .sun
-                    .0
-                    .dot(self.pixels[x as usize][y as usize].normal.0)
+                let sun = self.sun.to_vec3();
+
+                let light = sun
+                    .dot(self.pixels[x as usize][y as usize].normal.to_vec3())
                     .max(0.0)
-                    .powf(0.7);
+                    .max(0.2);
 
                 // TODO parametrize
-                let light_factor = 0.4;
-                let pastel = 0.7;
-                let f = |c: u8| {
-                    ((c as f32) * light.max(light_factor) * pastel + 255.0 * (1.0 - pastel)) as u8
-                };
+                let f = |c: u8| ((c as f32) * light) as u8;
 
                 let c = self.pixels[x as usize][y as usize].color;
                 let color = Color::new(f(c.r), f(c.g), f(c.b), c.a);
@@ -157,7 +153,7 @@ impl PrettyRender {
         let mut canvas = Canvas::new(
             tree.config.width as usize / tree.config.pixel_size,
             tree.config.height as usize / tree.config.pixel_size,
-            Normal(Vector2::new(-2.0, 1.0).normalized()),
+            Normal(Vector2::new(-2.0, 1.0).normalized() * 0.7),
             tree.config.pixel_size as _,
         );
         let scaling = 1.0 / tree.config.pixel_size as f32;
@@ -176,7 +172,7 @@ impl PrettyRender {
                 canvas.draw_sphere(
                     interp_pos * scaling,
                     tree.radius_of(node) * scaling,
-                    Color::BROWN,
+                    Color::from_hex("8b6354").unwrap(),
                     0.01,
                 );
             }
