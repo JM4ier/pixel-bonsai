@@ -88,6 +88,7 @@ struct ColorPalette {
 
 #[derive(Debug, Clone)]
 struct Config {
+    origin: Vector2,
     attraction_dist: f32,
     kill_dist: f32,
     grow_dist: f32,
@@ -216,10 +217,7 @@ impl Tree {
             })
             .collect::<Vec<_>>();
         Self {
-            nodes: vec![Node::new_root(Vector2::new(
-                config.width / 2.0,
-                config.height / 10.0,
-            ))],
+            nodes: vec![Node::new_root(config.origin)],
             config,
             points,
             growing: true,
@@ -293,7 +291,6 @@ impl Tree {
                 return;
             }
         }
-
 
         let mut new_nodes = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
@@ -409,6 +406,7 @@ pub fn main() {
         old_branch: Color::BROWN,
     };
     let config = Config {
+        origin: Vector2::new(250.0, 20.0),
         attraction_dist: 20.0,
         kill_dist: 13.0,
         grow_dist: 10.0,
@@ -422,7 +420,7 @@ pub fn main() {
         parent_dir_factor: 0.1,
         weight_display_pow: 0.45,
         prune_pow: 0.35,
-        prune_size_ratio: 0.2,
+        prune_size_ratio: 0.01,
         leaf_max_width: 1.51,
         sprout_max_width: 3.5,
         leaf_size: 20.0,
@@ -433,7 +431,7 @@ pub fn main() {
         sky: Color::from_hex("CFF7E5").unwrap(),
         leaves: vec![
             LeafType {
-                color: Color::from_hex("fccfd6").unwrap(),
+                color: Color::from_hex("ffe0e0").unwrap(),
                 probability: 0.8,
                 size: 2.5,
             },
@@ -447,7 +445,7 @@ pub fn main() {
 
     let (mut rl, thread) = raylib::init()
         .size(config.width as i32 + 100, config.height as i32 + 100)
-        .title("hehe")
+        .title("Sakura")
         .build();
 
     let mut regenerated = false;
@@ -464,6 +462,8 @@ pub fn main() {
             }
             let mut d = rl.begin_drawing(&thread);
             d.clear_background(config.sky);
+            tree.sim();
+            tree.sim();
             tree.sim();
             let pretty = render::PrettyRender::new(tree.clone());
             pretty.render(&mut d);

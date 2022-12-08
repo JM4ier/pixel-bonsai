@@ -87,7 +87,6 @@ impl Canvas {
         if pixel.covers(&self.pixels[x][y]) {
             self.pixels[x][y] = pixel;
         }
-        // TODO: shadow
     }
     /// Draws a sphere onto the canvas
     ///
@@ -157,6 +156,33 @@ impl Canvas {
             }
         }
     }
+    pub fn render_shadows_to(
+        &self,
+        d: &mut RaylibDrawHandle,
+        origin_x: i32,
+        origin_y: i32,
+        alpha: f32,
+    ) {
+        for x in 0..self.width() {
+            for y in 0..self.height() {
+                let shadow = self.pixels[x as usize][y as usize].color.a as f32 / 255.0;
+                let color = Color::BLACK.fade(shadow * alpha);
+                let (ox, oy) = (origin_x / self.pixel_size, origin_y / self.pixel_size);
+                let (x, y) = (x - ox, y - oy);
+
+                let (x, y) = (y, -x / 2);
+                let (x, y) = (x + ox, y + oy);
+
+                d.draw_rectangle(
+                    x * self.pixel_size,
+                    (self.height() - y + 1) * self.pixel_size,
+                    self.pixel_size,
+                    self.pixel_size,
+                    color,
+                );
+            }
+        }
+    }
 }
 
 impl PrettyRender {
@@ -196,7 +222,7 @@ impl PrettyRender {
                 let leaf = tree.config.get_leaf_type(&mut rng);
                 if need_leaf_drawing {
                     // only check aliveness here to make the same number of calls to rng to have it consistent even when branches die
-                    canvas.draw_sphere((pos + o) * scaling, leaf.size, leaf.color, 0.6);
+                    canvas.draw_sphere((pos + o) * scaling, leaf.size, leaf.color, 0.65);
                 }
             };
 
@@ -218,11 +244,14 @@ impl PrettyRender {
                         interp_pos * scaling,
                         tree.radius_of(node) * scaling,
                         Color::from_hex("8b6354").unwrap(),
-                        0.01,
+                        0.3,
                     );
                 }
             }
         }
+        let (ox, oy) = (tree.config.origin.x as _, tree.config.origin.y as _);
+        canvas.render_shadows_to(d, ox, oy, 0.3);
+        leaf_canvas_back.render_shadows_to(d, ox, oy, 0.1);
         leaf_canvas_back.render_to(d);
         canvas.render_to(d);
         leaf_canvas_front.render_to(d);
