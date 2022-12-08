@@ -5,7 +5,8 @@ mod render;
 use std::ops::Add;
 
 use fuss::Simplex;
-use rand::{rngs::ThreadRng, Rng};
+use rand::{rngs::ThreadRng, seq::SliceRandom, Rng};
+use rand_chacha::ChaCha12Rng;
 use raylib::prelude::*;
 
 struct SimplexDensityPRG {
@@ -85,7 +86,7 @@ struct ColorPalette {
     old_branch: Color,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 struct Config {
     attraction_dist: f32,
     kill_dist: f32,
@@ -111,6 +112,31 @@ struct Config {
     node_depth_max: usize,
     /// How big one "pixel" is (in pixels)
     pixel_size: usize,
+    leaves: Vec<LeafType>,
+    sky: Color,
+}
+
+#[derive(Copy, Clone, Debug)]
+struct LeafType {
+    color: Color,
+    size: f32,
+    probability: f32,
+}
+
+impl Config {
+    pub fn get_leaf_type(&self, rng: &mut ChaCha12Rng) -> LeafType {
+        let mut choice = rng.gen::<f32>();
+        assert!(!self.leaves.is_empty());
+        loop {
+            for leaf in self.leaves.iter() {
+                assert!(leaf.probability > 0.0);
+                choice -= leaf.probability;
+                if choice < 0.0 {
+                    return *leaf;
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -138,7 +164,7 @@ impl Node {
             z: 0.0,
         }
     }
-    fn new_branch(pos: Vector2, parent_idx: usize, parent: Node, config: Config) -> Self {
+    fn new_branch(pos: Vector2, parent_idx: usize, parent: Node, config: &Config) -> Self {
         let z_change = (2.0 * rand::random::<f32>() - 1.0) * config.node_depth_change;
         let z = parent.z + z_change;
         let z = z.max(0.0).min(config.node_depth_max as _);
@@ -166,11 +192,12 @@ struct Tree {
     config: Config,
     points: Vec<Vector2>,
     growing: bool,
+    to_be_added: Vec<Node>,
 }
 
 impl Tree {
     fn new_min_growth(config: Config, iter: usize) -> Self {
-        let mut tree = Self::new(config);
+        let mut tree = Self::new(config.clone());
         for _ in 0..iter {
             tree.sim();
         }
@@ -196,6 +223,7 @@ impl Tree {
             config,
             points,
             growing: true,
+            to_be_added: vec![],
         }
     }
     fn render(&self, d: &mut RaylibDrawHandle, mode: DrawMode) {
@@ -256,6 +284,17 @@ impl Tree {
         if !self.growing {
             return;
         }
+
+        if !self.to_be_added.is_empty() {
+            let node = self.to_be_added.pop().unwrap();
+            self.nodes[node.parent.unwrap()].child_count += 1;
+            self.nodes.push(node);
+            if !self.to_be_added.is_empty() {
+                return;
+            }
+        }
+
+
         let mut new_nodes = vec![];
         for (node_idx, node) in self.nodes.iter().enumerate() {
             if node.child_count >= self.config.max_children || !node.alive {
@@ -290,7 +329,7 @@ impl Tree {
                 node.pos + delta,
                 node_idx,
                 *node,
-                self.config,
+                &self.config,
             ));
         }
         self.points
@@ -314,8 +353,7 @@ impl Tree {
                     continue 'outer;
                 }
             }
-            self.nodes[node.parent.unwrap()].child_count += 1;
-            self.nodes.push(node);
+            self.to_be_added.push(node);
             has_change = true;
         }
         self.growing &= has_change;
@@ -385,13 +423,26 @@ pub fn main() {
         weight_display_pow: 0.45,
         prune_pow: 0.35,
         prune_size_ratio: 0.2,
-        leaf_max_width: 2.51,
+        leaf_max_width: 1.51,
         sprout_max_width: 3.5,
         leaf_size: 20.0,
         node_depth_change: 1.0,
         node_depth_max: 5,
         pixel_size: 6,
         colors,
+        sky: Color::from_hex("CFF7E5").unwrap(),
+        leaves: vec![
+            LeafType {
+                color: Color::from_hex("fccfd6").unwrap(),
+                probability: 0.8,
+                size: 2.5,
+            },
+            LeafType {
+                color: Color::from_hex("FF5173").unwrap(),
+                probability: 0.2,
+                size: 1.0,
+            },
+        ],
     };
 
     let (mut rl, thread) = raylib::init()
@@ -400,8 +451,9 @@ pub fn main() {
         .build();
 
     let mut regenerated = false;
+    let mut idx = 0;
     'regenerate: while !rl.window_should_close() {
-        let mut tree = Tree::new_min_growth(config, 5);
+        let mut tree = Tree::new_min_growth(config.clone(), 5);
 
         rl.set_target_fps(60);
 
@@ -411,12 +463,12 @@ pub fn main() {
                 continue 'regenerate;
             }
             let mut d = rl.begin_drawing(&thread);
-            d.clear_background(Color::WHITE);
-            //tree.render(&mut d, DrawMode::Pretty);
+            d.clear_background(config.sky);
             tree.sim();
             let pretty = render::PrettyRender::new(tree.clone());
             pretty.render(&mut d);
             regenerated = false;
+            idx += 1;
         }
 
         break;

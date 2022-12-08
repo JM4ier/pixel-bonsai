@@ -1,3 +1,5 @@
+use std::thread::Thread;
+
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
@@ -185,20 +187,22 @@ impl PrettyRender {
             let need_leaf_drawing = tree.radius_of(node) < tree.config.leaf_max_width && node.alive;
             // rendering a leaf
 
-            let mut offset = || (rng.gen::<f32>() * 2.0 - 1.0) * tree.config.leaf_size;
-            let mut offset = || Vector2::new(offset(), offset());
+            let offset =
+                |rng: &mut ChaCha12Rng| (rng.gen::<f32>() * 2.0 - 1.0) * tree.config.leaf_size;
+            let offset = |rng: &mut ChaCha12Rng| Vector2::new(offset(rng), offset(rng));
 
-            let mut draw_leaf = |canvas: &mut Canvas, radius: f32| {
-                let o = offset();
+            let mut draw_leaf = |canvas: &mut Canvas| {
+                let o = offset(&mut rng);
+                let leaf = tree.config.get_leaf_type(&mut rng);
                 if need_leaf_drawing {
                     // only check aliveness here to make the same number of calls to rng to have it consistent even when branches die
-                    canvas.draw_sphere((pos + o) * scaling, radius, Color::MAROON, 0.6);
+                    canvas.draw_sphere((pos + o) * scaling, leaf.size, leaf.color, 0.6);
                 }
             };
 
             for _ in 0..2 {
-                draw_leaf(&mut leaf_canvas_front, 2.0);
-                draw_leaf(&mut leaf_canvas_back, 3.0);
+                draw_leaf(&mut leaf_canvas_front);
+                draw_leaf(&mut leaf_canvas_back);
             }
 
             if !need_leaf_drawing && node.alive {
