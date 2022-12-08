@@ -73,6 +73,7 @@ version = "0.1.0"
 dependencies = [
  "fuss",
  "rand 0.8.5",
+ "rand_chacha",
  "raylib",
 ]
 

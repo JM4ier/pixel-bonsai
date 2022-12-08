@@ -1,3 +1,6 @@
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
+
 use crate::*;
 
 pub(crate) struct PrettyRender {
@@ -45,6 +48,10 @@ impl Pixel {
     fn covers(&self, other: &Self) -> bool {
         self.normal.implied_z_sqr() > other.normal.implied_z_sqr()
     }
+}
+
+pub struct Sprite {
+    pixels: Vec<(usize, usize, Pixel)>,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -111,6 +118,11 @@ impl Canvas {
             }
         }
     }
+    pub fn draw_sprite(&mut self, ox: usize, oy: usize, sprite: &Sprite, translucency: f32) {
+        for (x, y, pixel) in &sprite.pixels {
+            self.draw_pixel(x + ox, y + oy, *pixel, translucency);
+        }
+    }
     pub fn width(&self) -> i32 {
         self.pixels.len() as _
     }
@@ -162,23 +174,34 @@ impl PrettyRender {
             Normal(Vector2::new(-2.0, 1.0).normalized() * 0.7),
             tree.config.pixel_size as _,
         );
-        let mut leaf_canvas = canvas.clone();
+        let mut leaf_canvas_front = canvas.clone();
+        let mut leaf_canvas_back = canvas.clone();
         let scaling = 1.0 / tree.config.pixel_size as f32;
+
+        let mut rng = ChaCha12Rng::seed_from_u64(0);
+
         for node in tree.nodes.iter() {
-            if !node.alive {
-                continue;
-            }
             let pos = node.pos;
-            if tree.radius_of(node) < tree.config.leaf_max_width {
-                // rendering a leaf
-                leaf_canvas.draw_sphere(
-                    pos * scaling,
-                    tree.config.leaf_size * scaling,
-                    Color::MAROON,
-                    //Color::from_hex("ef8ef9").unwrap(),
-                    0.6,
-                );
-            } else {
+            let need_leaf_drawing = tree.radius_of(node) < tree.config.leaf_max_width && node.alive;
+            // rendering a leaf
+
+            let mut offset = || (rng.gen::<f32>() * 2.0 - 1.0) * tree.config.leaf_size;
+            let mut offset = || Vector2::new(offset(), offset());
+
+            let mut draw_leaf = |canvas: &mut Canvas, radius: f32| {
+                let o = offset();
+                if need_leaf_drawing {
+                    // only check aliveness here to make the same number of calls to rng to have it consistent even when branches die
+                    canvas.draw_sphere((pos + o) * scaling, radius, Color::MAROON, 0.6);
+                }
+            };
+
+            for _ in 0..2 {
+                draw_leaf(&mut leaf_canvas_front, 2.0);
+                draw_leaf(&mut leaf_canvas_back, 3.0);
+            }
+
+            if !need_leaf_drawing && node.alive {
                 // rendering a branch
                 let parent_pos = if let Some(parent_idx) = node.parent {
                     tree.nodes[parent_idx].pos
@@ -196,7 +219,8 @@ impl PrettyRender {
                 }
             }
         }
+        leaf_canvas_back.render_to(d);
         canvas.render_to(d);
-        leaf_canvas.render_to(d);
+        leaf_canvas_front.render_to(d);
     }
 }

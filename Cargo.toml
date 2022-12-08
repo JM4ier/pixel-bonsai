@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 raylib = "3.7.0"
 rand = "0.8.5"
+rand_chacha = "0.3.1"
 fuss = "0.2.2"
